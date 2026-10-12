@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Folder, MediaItem, GalleryConfig, UploadProgressItem } from '../types/gallery';
-import { getSupabaseClient, getSignedMediaUrl } from '../lib/supabase';
+import { getSupabaseClient, getSignedMediaUrl, getActiveSupabaseSession } from '../lib/supabase';
 import {
   getStoredDemoFolders,
   saveStoredDemoFolders,
@@ -14,7 +14,7 @@ import {
 } from '../lib/demoData';
 import { processImageBeforeUpload, processVideoBeforeUpload } from '../lib/imageProcessor';
 
-export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
+export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDemo = false) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -37,8 +37,9 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
     setIsLoadingFolders(true);
     const client = getSupabaseClient(config);
 
-    if (client) {
+    if (client && !isAuthDemo) {
       try {
+        const sessionInfo = await getActiveSupabaseSession(client);
         const { data, error } = await client
           .from('folders')
           .select('*, media_items(count)')
@@ -68,7 +69,7 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
           );
 
           setFolders(mapped);
-          setIsDemoMode(false);
+          setIsDemoMode(!sessionInfo.hasSession || !sessionInfo.isAdmin);
           setIsLoadingFolders(false);
           return;
         }
@@ -88,7 +89,7 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
     setFolders(foldersWithCount);
     setIsDemoMode(true);
     setIsLoadingFolders(false);
-  }, [config]);
+  }, [config, isAuthDemo]);
 
   // Load Media Items for Selected Folder
   const loadMediaForFolder = useCallback(
@@ -96,7 +97,7 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
       setIsLoadingMedia(true);
       const client = getSupabaseClient(config);
 
-      if (client && !isDemoMode) {
+      if (client && !isDemoMode && !isAuthDemo && !folderId.startsWith('folder-')) {
         try {
           const { data, error } = await client
             .from('media_items')
@@ -140,7 +141,7 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
       setMediaItems(filtered);
       setIsLoadingMedia(false);
     },
-    [config, isDemoMode]
+    [config, isDemoMode, isAuthDemo]
   );
 
   useEffect(() => {
@@ -178,28 +179,40 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
     const newPosition = folders.length;
     const client = getSupabaseClient(config);
 
-    if (client && !isDemoMode) {
+    if (client && !isDemoMode && !isAuthDemo) {
       try {
-        const { data, error } = await client
-          .from('folders')
-          .insert([{ name: trimmed, position: newPosition }])
-          .select()
-          .single();
+        const sessionInfo = await getActiveSupabaseSession(client);
+        if (!sessionInfo.hasSession || !sessionInfo.isAdmin) {
+          setIsDemoMode(true);
+        } else {
+          const { data, error } = await client
+            .from('folders')
+            .insert([{ name: trimmed, position: newPosition }])
+            .select()
+            .single();
 
-        if (error) throw error;
-        if (data) {
-          const newFolder: Folder = {
-            id: data.id,
-            name: data.name,
-            position: data.position,
-            item_count: 0,
-            created_at: data.created_at,
-          };
-          setFolders((prev) => [...prev, newFolder]);
-          return newFolder;
+          if (error) {
+            if (error.code === '42501') {
+              console.warn('Supabase RLS: Insufficient privileges. Saving folder locally.');
+              setIsDemoMode(true);
+            } else {
+              throw error;
+            }
+          } else if (data) {
+            const newFolder: Folder = {
+              id: data.id,
+              name: data.name,
+              position: data.position,
+              item_count: 0,
+              created_at: data.created_at,
+            };
+            setFolders((prev) => [...prev, newFolder]);
+            return newFolder;
+          }
         }
-      } catch (err) {
-        console.error('Error creating folder in Supabase:', err);
+      } catch (err: any) {
+        console.warn('Error creating folder in Supabase, saving locally:', err?.message || err);
+        setIsDemoMode(true);
       }
     }
 
@@ -222,11 +235,14 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
     if (!trimmed) return;
 
     const client = getSupabaseClient(config);
-    if (client && !isDemoMode) {
+    if (client && !isDemoMode && !isAuthDemo && !folderId.startsWith('folder-')) {
       try {
-        await client.from('folders').update({ name: trimmed }).eq('id', folderId);
-      } catch (e) {
-        console.error(e);
+        const sessionInfo = await getActiveSupabaseSession(client);
+        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
+          await client.from('folders').update({ name: trimmed }).eq('id', folderId);
+        }
+      } catch (e: any) {
+        console.warn('Rename folder Supabase error:', e?.message || e);
       }
     }
 
@@ -244,11 +260,14 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
 
   const deleteFolder = async (folderId: string) => {
     const client = getSupabaseClient(config);
-    if (client && !isDemoMode) {
+    if (client && !isDemoMode && !isAuthDemo && !folderId.startsWith('folder-')) {
       try {
-        await client.from('folders').delete().eq('id', folderId);
-      } catch (e) {
-        console.error(e);
+        const sessionInfo = await getActiveSupabaseSession(client);
+        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
+          await client.from('folders').delete().eq('id', folderId);
+        }
+      } catch (e: any) {
+        console.warn('Delete folder Supabase error:', e?.message || e);
       }
     }
 
@@ -270,13 +289,18 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
     setFolders(updatedWithPos);
 
     const client = getSupabaseClient(config);
-    if (client && !isDemoMode) {
+    if (client && !isDemoMode && !isAuthDemo) {
       try {
-        for (const f of updatedWithPos) {
-          await client.from('folders').update({ position: f.position }).eq('id', f.id);
+        const sessionInfo = await getActiveSupabaseSession(client);
+        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
+          for (const f of updatedWithPos) {
+            if (!f.id.startsWith('folder-')) {
+              await client.from('folders').update({ position: f.position }).eq('id', f.id);
+            }
+          }
         }
-      } catch (e) {
-        console.error('Reorder folders error', e);
+      } catch (e: any) {
+        console.warn('Reorder folders error:', e?.message || e);
       }
     }
 
@@ -287,11 +311,14 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
 
   const setFolderCover = async (folderId: string, coverUrl: string) => {
     const client = getSupabaseClient(config);
-    if (client && !isDemoMode) {
+    if (client && !isDemoMode && !isAuthDemo && !folderId.startsWith('folder-')) {
       try {
-        await client.from('folders').update({ cover_url: coverUrl }).eq('id', folderId);
-      } catch (e) {
-        console.error('Error setting cover image', e);
+        const sessionInfo = await getActiveSupabaseSession(client);
+        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
+          await client.from('folders').update({ cover_url: coverUrl }).eq('id', folderId);
+        }
+      } catch (e: any) {
+        console.warn('Error setting cover image:', e?.message || e);
       }
     }
 
@@ -313,13 +340,18 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
     setMediaItems(updatedWithPos);
 
     const client = getSupabaseClient(config);
-    if (client && !isDemoMode) {
+    if (client && !isDemoMode && !isAuthDemo && selectedFolderId && !selectedFolderId.startsWith('folder-')) {
       try {
-        for (const m of updatedWithPos) {
-          await client.from('media_items').update({ position: m.position }).eq('id', m.id);
+        const sessionInfo = await getActiveSupabaseSession(client);
+        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
+          for (const m of updatedWithPos) {
+            if (!m.id.startsWith('media-')) {
+              await client.from('media_items').update({ position: m.position }).eq('id', m.id);
+            }
+          }
         }
-      } catch (e) {
-        console.error('Reorder media error', e);
+      } catch (e: any) {
+        console.warn('Reorder media error:', e?.message || e);
       }
     }
 
@@ -334,12 +366,15 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
     if (!itemIds.length) return;
 
     const client = getSupabaseClient(config);
-    if (client && !isDemoMode) {
+    const dbItemIds = itemIds.filter((id) => !id.startsWith('media-'));
+    if (client && !isDemoMode && !isAuthDemo && dbItemIds.length > 0) {
       try {
-        // Delete records
-        await client.from('media_items').delete().in('id', itemIds);
-      } catch (e) {
-        console.error('Delete items error', e);
+        const sessionInfo = await getActiveSupabaseSession(client);
+        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
+          await client.from('media_items').delete().in('id', dbItemIds);
+        }
+      } catch (e: any) {
+        console.warn('Delete items error:', e?.message || e);
       }
     }
 
@@ -362,14 +397,18 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
     if (!itemIds.length || !targetFolderId || targetFolderId === selectedFolderId) return;
 
     const client = getSupabaseClient(config);
-    if (client && !isDemoMode) {
+    const dbItemIds = itemIds.filter((id) => !id.startsWith('media-'));
+    if (client && !isDemoMode && !isAuthDemo && !targetFolderId.startsWith('folder-') && dbItemIds.length > 0) {
       try {
-        await client
-          .from('media_items')
-          .update({ folder_id: targetFolderId })
-          .in('id', itemIds);
-      } catch (e) {
-        console.error('Move items error', e);
+        const sessionInfo = await getActiveSupabaseSession(client);
+        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
+          await client
+            .from('media_items')
+            .update({ folder_id: targetFolderId })
+            .in('id', dbItemIds);
+        }
+      } catch (e: any) {
+        console.warn('Move items error:', e?.message || e);
       }
     }
 
@@ -411,6 +450,15 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
 
     setUploadQueue(initialQueue);
     const client = getSupabaseClient(config);
+    let canUploadCloud = false;
+    if (client && !isDemoMode && !isAuthDemo && !targetFolderId.startsWith('folder-')) {
+      try {
+        const sessionInfo = await getActiveSupabaseSession(client);
+        canUploadCloud = sessionInfo.hasSession && sessionInfo.isAdmin;
+      } catch {
+        canUploadCloud = false;
+      }
+    }
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -451,70 +499,84 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
         const mainPath = `${targetFolderId}/${timestamp}_${cleanName}`;
         const thumbPath = `${targetFolderId}/thumbs/${timestamp}_thumb_${cleanName}.jpg`;
 
-        if (client && !isDemoMode) {
-          // Upload main file to private storage bucket 'foto-media'
-          const { error: uploadErr } = await client.storage
-            .from('foto-media')
-            .upload(mainPath, processedBlob, {
-              cacheControl: '3600',
-              upsert: false,
-              contentType: file.type || 'image/jpeg',
-            });
+        let uploadedCloud = false;
 
-          if (uploadErr) throw uploadErr;
+        if (canUploadCloud && client) {
+          try {
+            // Upload main file to private storage bucket 'foto-media'
+            const { error: uploadErr } = await client.storage
+              .from('foto-media')
+              .upload(mainPath, processedBlob, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: file.type || 'image/jpeg',
+              });
 
-          // Upload thumbnail
-          if (thumbBlob) {
-            await client.storage.from('foto-media').upload(thumbPath, thumbBlob, {
-              cacheControl: '3600',
-              upsert: false,
-              contentType: 'image/jpeg',
-            });
+            if (uploadErr) throw uploadErr;
+
+            // Upload thumbnail
+            if (thumbBlob) {
+              await client.storage.from('foto-media').upload(thumbPath, thumbBlob, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: 'image/jpeg',
+              });
+            }
+
+            setUploadQueue((prev) =>
+              prev.map((item) =>
+                item.id === queueItem.id ? { ...item, progress: 85 } : item
+              )
+            );
+
+            // Insert media record in database
+            const { data: insertedItem, error: dbErr } = await client
+              .from('media_items')
+              .insert([
+                {
+                  folder_id: targetFolderId,
+                  name: file.name,
+                  type: file.type.startsWith('video') ? 'video' : 'image',
+                  storage_path: mainPath,
+                  thumbnail_path: thumbPath,
+                  size: processedBlob.size,
+                  width,
+                  height,
+                  duration,
+                  position: mediaItems.length + i,
+                },
+              ])
+              .select()
+              .single();
+
+            if (dbErr) throw dbErr;
+
+            // Obtain signed URL for display
+            const signedUrl = await getSignedMediaUrl(mainPath, config);
+            const signedThumbUrl = await getSignedMediaUrl(thumbPath, config);
+
+            if (insertedItem && selectedFolderId === targetFolderId) {
+              setMediaItems((prev) => [
+                ...prev,
+                {
+                  ...insertedItem,
+                  url: signedUrl || undefined,
+                  thumbnail_url: signedThumbUrl || undefined,
+                },
+              ]);
+            }
+            uploadedCloud = true;
+          } catch (cloudErr: any) {
+            console.warn(
+              'Cloud storage/RLS upload failed, using local preview for file:',
+              file.name,
+              cloudErr?.message || cloudErr
+            );
+            uploadedCloud = false;
           }
+        }
 
-          setUploadQueue((prev) =>
-            prev.map((item) =>
-              item.id === queueItem.id ? { ...item, progress: 85 } : item
-            )
-          );
-
-          // Insert media record in database
-          const { data: insertedItem, error: dbErr } = await client
-            .from('media_items')
-            .insert([
-              {
-                folder_id: targetFolderId,
-                name: file.name,
-                type: file.type.startsWith('video') ? 'video' : 'image',
-                storage_path: mainPath,
-                thumbnail_path: thumbPath,
-                size: processedBlob.size,
-                width,
-                height,
-                duration,
-                position: mediaItems.length + i,
-              },
-            ])
-            .select()
-            .single();
-
-          if (dbErr) throw dbErr;
-
-          // Obtain signed URL for display
-          const signedUrl = await getSignedMediaUrl(mainPath, config);
-          const signedThumbUrl = await getSignedMediaUrl(thumbPath, config);
-
-          if (insertedItem && selectedFolderId === targetFolderId) {
-            setMediaItems((prev) => [
-              ...prev,
-              {
-                ...insertedItem,
-                url: signedUrl || undefined,
-                thumbnail_url: signedThumbUrl || undefined,
-              },
-            ]);
-          }
-        } else {
+        if (!uploadedCloud) {
           // Local/Demo storage using ObjectURLs
           const localUrl = URL.createObjectURL(processedBlob);
           const localThumbUrl = thumbBlob ? URL.createObjectURL(thumbBlob) : localUrl;
@@ -546,7 +608,8 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
         // Set folder cover if folder currently has no cover
         const targetFolder = folders.find((f) => f.id === targetFolderId);
         if (targetFolder && !targetFolder.cover_url) {
-          const coverPath = client && !isDemoMode ? mainPath : URL.createObjectURL(processedBlob);
+          const coverPath =
+            uploadedCloud && client ? mainPath : URL.createObjectURL(processedBlob);
           setFolderCover(targetFolderId, coverPath);
         }
 
@@ -565,11 +628,11 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean) {
           )
         );
       } catch (err: any) {
-        console.error('Error during upload of file', file.name, err);
+        console.warn('Error during upload of file:', file.name, err?.message || err);
         setUploadQueue((prev) =>
           prev.map((item) =>
             item.id === queueItem.id
-              ? { ...item, status: 'error', errorMessage: err.message || 'Upload failed' }
+              ? { ...item, status: 'error', errorMessage: err?.message || 'Upload failed' }
               : item
           )
         );

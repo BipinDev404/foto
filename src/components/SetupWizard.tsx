@@ -70,7 +70,9 @@ CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
   SELECT COALESCE(
     (auth.jwt() ->> 'email') LIKE 'admin@%'
-    OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin',
+    OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    OR (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+    OR (auth.jwt() ->> 'role') = 'service_role',
     false
   );
 $$;
@@ -80,10 +82,10 @@ ALTER TABLE public.folders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.media_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gallery_settings ENABLE ROW LEVEL SECURITY;
 
--- 6. Read Policies (Authenticated Users: Viewer & Admin)
-CREATE POLICY "Authenticated users can read folders" ON public.folders FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Authenticated users can read media items" ON public.media_items FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Authenticated users can read settings" ON public.gallery_settings FOR SELECT TO authenticated USING (true);
+-- 6. Read Policies (Public & Authenticated)
+CREATE POLICY "Anyone can read folders" ON public.folders FOR SELECT USING (true);
+CREATE POLICY "Anyone can read media items" ON public.media_items FOR SELECT USING (true);
+CREATE POLICY "Anyone can read settings" ON public.gallery_settings FOR SELECT USING (true);
 
 -- 7. Write Policies (Admin Only)
 CREATE POLICY "Admins manage folders" ON public.folders FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());

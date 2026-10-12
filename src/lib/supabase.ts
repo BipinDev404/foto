@@ -43,6 +43,44 @@ export interface AuthResult {
   isDemo?: boolean;
 }
 
+export interface SupabaseSessionInfo {
+  hasSession: boolean;
+  isAdmin: boolean;
+  email?: string;
+}
+
+/**
+ * Checks if the Supabase client currently has an active session and if that user is an admin.
+ */
+export async function getActiveSupabaseSession(
+  client: SupabaseClient | null
+): Promise<SupabaseSessionInfo> {
+  if (!client) {
+    return { hasSession: false, isAdmin: false };
+  }
+
+  try {
+    const { data, error } = await client.auth.getSession();
+    if (error || !data.session?.user) {
+      return { hasSession: false, isAdmin: false };
+    }
+
+    const user = data.session.user;
+    const email = user.email || '';
+    const metadataRole = user.user_metadata?.role || user.app_metadata?.role;
+    const isAdmin = email.startsWith('admin@') || metadataRole === 'admin';
+
+    return {
+      hasSession: true,
+      isAdmin,
+      email,
+    };
+  } catch (e) {
+    console.warn('Error reading active Supabase session', e);
+    return { hasSession: false, isAdmin: false };
+  }
+}
+
 /**
  * Single-field login: tries Admin account first, then Viewer account.
  * If credentials are not yet linked to live Supabase, smoothly checks demo template credentials.
@@ -52,6 +90,7 @@ export async function authenticateWithSinglePassword(
   config: GalleryConfig
 ): Promise<AuthResult> {
   const client = getSupabaseClient(config);
+  const trimmed = password.trim();
 
   if (client) {
     try {
@@ -74,19 +113,38 @@ export async function authenticateWithSinglePassword(
       if (!viewerErr && viewerData.session) {
         return { success: true, role: 'viewer', isDemo: false };
       }
+
+      // 3. If admin account does not exist yet but matches config password, attempt signup with admin role
+      if (trimmed === config.adminPassword) {
+        try {
+          const { data: signUpData, error: signUpErr } = await client.auth.signUp({
+            email: config.adminEmail,
+            password: password,
+            options: {
+              data: { role: 'admin' },
+            },
+          });
+          if (!signUpErr && signUpData.session) {
+            return { success: true, role: 'admin', isDemo: false };
+          }
+        } catch {
+          // ignore signup fallback
+        }
+      }
     } catch (err) {
       console.warn('Supabase auth network check failed, testing fallback credentials', err);
     }
   }
 
   // Fallback demo/template authentication check if not configured or demo mode
-  const trimmed = password.trim();
+  // Note: Since there is no active authenticated session in Supabase Auth, isDemo MUST be true
+  // to prevent unauthenticated operations from triggering RLS error 42501 in Supabase.
   if (config.adminPassword && trimmed === config.adminPassword) {
-    return { success: true, role: 'admin', isDemo: !client };
+    return { success: true, role: 'admin', isDemo: true };
   }
 
   if (config.viewerPassword && trimmed === config.viewerPassword) {
-    return { success: true, role: 'viewer', isDemo: !client };
+    return { success: true, role: 'viewer', isDemo: true };
   }
 
   return { success: false, error: 'Incorrect password' };

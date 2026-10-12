@@ -45,6 +45,7 @@ export default function App() {
     role,
     isAdmin,
     isLoggedIn,
+    isAuthDemo,
     isAuthenticating,
     errorMessage,
     lockoutRemaining,
@@ -77,7 +78,7 @@ export default function App() {
     deleteMediaItems,
     moveMediaItems,
     uploadFiles,
-  } = useGallery(config, isLoggedIn);
+  } = useGallery(config, isLoggedIn, isAuthDemo);
 
   // Modals and Selection state
   const [isSetupWizardOpen, setIsSetupWizardOpen] = useState(false);
@@ -298,7 +299,10 @@ export default function App() {
         onClose={() => setIsUploadModalOpen(false)}
         folders={allFolders}
         activeFolderId={selectedFolderId}
-        onUpload={uploadFiles}
+        onUpload={async (files, targetId) => {
+          await uploadFiles(files, targetId);
+          setSelectedFolderId(targetId);
+        }}
         uploadQueue={uploadQueue}
         isUploading={isUploading}
       />

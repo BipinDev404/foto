@@ -56,7 +56,9 @@ SECURITY DEFINER
 AS $$
   SELECT COALESCE(
     (auth.jwt() ->> 'email') LIKE 'admin@%'
-    OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin',
+    OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    OR (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+    OR (auth.jwt() ->> 'role') = 'service_role',
     false
   );
 $$;
@@ -66,23 +68,23 @@ ALTER TABLE public.folders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.media_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gallery_settings ENABLE ROW LEVEL SECURITY;
 
--- 7. RLS Policies: Read Access (Any Authenticated User: Viewer or Admin)
+-- 7. RLS Policies: Read Access (Allows both authenticated users and public gallery visitors to read)
 DROP POLICY IF EXISTS "Authenticated users can read folders" ON public.folders;
-CREATE POLICY "Authenticated users can read folders"
+DROP POLICY IF EXISTS "Anyone can read folders" ON public.folders;
+CREATE POLICY "Anyone can read folders"
     ON public.folders FOR SELECT
-    TO authenticated
     USING (true);
 
 DROP POLICY IF EXISTS "Authenticated users can read media items" ON public.media_items;
-CREATE POLICY "Authenticated users can read media items"
+DROP POLICY IF EXISTS "Anyone can read media items" ON public.media_items;
+CREATE POLICY "Anyone can read media items"
     ON public.media_items FOR SELECT
-    TO authenticated
     USING (true);
 
 DROP POLICY IF EXISTS "Authenticated users can read gallery settings" ON public.gallery_settings;
-CREATE POLICY "Authenticated users can read gallery settings"
+DROP POLICY IF EXISTS "Anyone can read gallery settings" ON public.gallery_settings;
+CREATE POLICY "Anyone can read gallery settings"
     ON public.gallery_settings FOR SELECT
-    TO authenticated
     USING (true);
 
 -- 8. RLS Policies: Write Access (Admin Only)

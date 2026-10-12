@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Upload,
@@ -43,6 +43,32 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync destination folder when modal opens or active folder changes
+  useEffect(() => {
+    if (isOpen) {
+      if (activeFolderId) {
+        setSelectedFolderId(activeFolderId);
+      } else if (!selectedFolderId || !folders.some((f) => f.id === selectedFolderId)) {
+        if (folders.length > 0) {
+          setSelectedFolderId(folders[0].id);
+        }
+      }
+    }
+  }, [isOpen, activeFolderId, folders, selectedFolderId]);
+
+  // Auto-close modal after successful upload completion
+  useEffect(() => {
+    if (uploadQueue.length > 0 && !isUploading) {
+      const allDone = uploadQueue.every((q) => q.status === 'completed');
+      if (allDone) {
+        const timer = setTimeout(() => {
+          onClose();
+        }, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [uploadQueue, isUploading, onClose]);
+
   if (!isOpen) return null;
 
   const handleFilesSelected = (files: FileList | null) => {
@@ -56,11 +82,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
     setVideoWarnings(largeVideos);
     setStagedFiles((prev) => [...prev, ...incoming]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleStartUpload = async () => {
-    if (stagedFiles.length === 0 || !selectedFolderId) return;
-    await onUpload(stagedFiles, selectedFolderId);
+    const targetId = selectedFolderId || activeFolderId || folders[0]?.id;
+    if (stagedFiles.length === 0 || !targetId) return;
+    await onUpload(stagedFiles, targetId);
     setStagedFiles([]);
     setVideoWarnings([]);
   };
@@ -92,18 +122,24 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           <label className="block text-xs font-medium text-[#6E6E73] dark:text-[#86868B] mb-1.5">
             Destination Album
           </label>
-          <select
-            value={selectedFolderId}
-            onChange={(e) => setSelectedFolderId(e.target.value)}
-            disabled={isUploading}
-            className="w-full px-3 py-2 text-xs rounded-xl bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.08] text-[#1D1D1F] dark:text-[#F5F5F7] outline-none focus:ring-2 focus:ring-[#0071E3]"
-          >
-            {folders.map((f) => (
-              <option key={f.id} value={f.id} className="dark:bg-[#1C1C1E]">
-                {f.name}
-              </option>
-            ))}
-          </select>
+          {folders.length === 0 ? (
+            <p className="text-xs text-[#FF3B30] dark:text-[#FF453A] p-2 bg-red-500/10 rounded-xl">
+              No albums created yet. Please create an album before uploading.
+            </p>
+          ) : (
+            <select
+              value={selectedFolderId || folders[0]?.id || ''}
+              onChange={(e) => setSelectedFolderId(e.target.value)}
+              disabled={isUploading}
+              className="w-full px-3 py-2 text-xs rounded-xl bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.08] text-[#1D1D1F] dark:text-[#F5F5F7] outline-none focus:ring-2 focus:ring-[#0071E3]"
+            >
+              {folders.map((f) => (
+                <option key={f.id} value={f.id} className="dark:bg-[#1C1C1E]">
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Drag and Drop Dropzone */}

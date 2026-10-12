@@ -12,10 +12,14 @@ const LOCKOUT_DURATION_MS = 60 * 1000; // 1 minute
 const LOCKOUT_KEY = 'foto_auth_lockout_until';
 const ATTEMPTS_KEY = 'foto_auth_failed_attempts';
 const SESSION_ROLE_KEY = 'foto_current_session_role';
+const IS_DEMO_KEY = 'foto_auth_is_demo';
 
 export function useAuth(config: GalleryConfig) {
   const [role, setRole] = useState<UserRole | null>(() => {
     return (sessionStorage.getItem(SESSION_ROLE_KEY) as UserRole) || null;
+  });
+  const [isAuthDemo, setIsAuthDemo] = useState<boolean>(() => {
+    return sessionStorage.getItem(IS_DEMO_KEY) === 'true';
   });
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -65,7 +69,10 @@ export function useAuth(config: GalleryConfig) {
 
         if (result.success && result.role) {
           setRole(result.role);
+          const demoMode = Boolean(result.isDemo);
+          setIsAuthDemo(demoMode);
           sessionStorage.setItem(SESSION_ROLE_KEY, result.role);
+          sessionStorage.setItem(IS_DEMO_KEY, demoMode ? 'true' : 'false');
           setFailedAttempts(0);
           localStorage.removeItem(ATTEMPTS_KEY);
           localStorage.removeItem(LOCKOUT_KEY);
@@ -106,7 +113,9 @@ export function useAuth(config: GalleryConfig) {
   const logout = useCallback(async () => {
     await signOutUser(config);
     sessionStorage.removeItem(SESSION_ROLE_KEY);
+    sessionStorage.removeItem(IS_DEMO_KEY);
     setRole(null);
+    setIsAuthDemo(false);
   }, [config]);
 
   return {
@@ -114,6 +123,7 @@ export function useAuth(config: GalleryConfig) {
     isAdmin: role === 'admin',
     isViewer: role === 'viewer',
     isLoggedIn: role !== null,
+    isAuthDemo,
     isAuthenticating,
     errorMessage,
     lockoutRemaining,

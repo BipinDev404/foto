@@ -27,11 +27,16 @@ export const NewFolderModal: React.FC<NewFolderModalProps> = ({
     const trimmed = folderName.trim();
     if (!trimmed || isSubmitting) return;
 
-    setIsSubmitting(true);
-    await onCreate(trimmed);
-    setIsSubmitting(false);
-    setFolderName('');
-    onClose();
+    try {
+      setIsSubmitting(true);
+      await onCreate(trimmed);
+      setFolderName('');
+      onClose();
+    } catch (err) {
+      console.warn('Failed to create album:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
