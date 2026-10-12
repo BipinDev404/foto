@@ -5,6 +5,30 @@
 
 export type UserRole = 'viewer' | 'admin';
 
+export interface UserProfile {
+  handle: string; // e.g. 'bipinyadav'
+  displayName: string; // e.g. 'Bipin Yadav'
+  tagline: string; // e.g. 'Creative Director & High Fashion Photographer'
+  bio: string;
+  avatarUrl: string;
+  coverUrl?: string;
+  accentColor?: string; // e.g. '#0071E3'
+  location?: string;
+  instagram?: string;
+  twitter?: string;
+  website?: string;
+  email?: string;
+  adminPassword?: string;
+  viewerPassword?: string;
+  isVerified?: boolean;
+  createdAt: string;
+  stats?: {
+    views?: number;
+    photosCount?: number;
+    albumsCount?: number;
+  };
+}
+
 export interface Folder {
   id: string;
   name: string;
@@ -14,6 +38,7 @@ export interface Folder {
   item_count?: number;
   created_at: string;
   updated_at?: string;
+  profile_handle?: string; // multi-tenant ownership
 }
 
 export interface MediaItem {
@@ -32,6 +57,16 @@ export interface MediaItem {
   duration?: number; // seconds for videos
   position: number;
   created_at: string;
+  profile_handle?: string; // multi-tenant ownership
+  exif?: {
+    camera?: string;
+    lens?: string;
+    focalLength?: string;
+    aperture?: string;
+    shutterSpeed?: string;
+    iso?: string;
+    dateTaken?: string;
+  };
 }
 
 export interface GalleryConfig {

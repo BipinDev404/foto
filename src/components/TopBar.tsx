@@ -19,6 +19,9 @@ import { Folder, UserRole } from '../types/gallery';
 
 interface TopBarProps {
   galleryName: string;
+  ownerName?: string;
+  profilePhotoUrl?: string;
+  userEmail?: string;
   currentFolder: Folder | null;
   onNavigateHome: () => void;
   searchQuery: string;
@@ -32,6 +35,9 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({
   galleryName,
+  ownerName = 'Bipin Yadav',
+  profilePhotoUrl,
+  userEmail = 'bipinonlyforfun@gmail.com',
   currentFolder,
   onNavigateHome,
   searchQuery,
@@ -65,12 +71,22 @@ export const TopBar: React.FC<TopBarProps> = ({
               </h1>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-base sm:text-lg font-semibold tracking-tight text-[#1D1D1F] dark:text-[#F5F5F7]">
-                {galleryName}
-              </span>
+            <div className="flex items-center gap-2.5">
+              {profilePhotoUrl && (
+                <div className="w-7 h-7 rounded-full overflow-hidden border border-black/10 dark:border-white/10 shrink-0">
+                  <img src={profilePhotoUrl} alt={ownerName} className="w-full h-full object-cover" />
+                </div>
+              )}
+              <div className="flex flex-col">
+                <span className="text-sm sm:text-base font-semibold tracking-tight text-[#1D1D1F] dark:text-[#F5F5F7] leading-none">
+                  {galleryName}
+                </span>
+                <span className="text-[10px] font-normal text-[#6E6E73] dark:text-[#86868B] hidden sm:inline">
+                  {ownerName} ({userEmail})
+                </span>
+              </div>
               {/* Role Indicator */}
-              <div className="flex items-center gap-1 text-[11px] font-medium text-[#6E6E73] dark:text-[#86868B] px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06]">
+              <div className="flex items-center gap-1 text-[11px] font-medium text-[#6E6E73] dark:text-[#86868B] px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] shrink-0">
                 {role === 'admin' ? (
                   <>
                     <ShieldCheck className="w-3 h-3 text-[#0071E3] dark:text-[#2997FF]" />

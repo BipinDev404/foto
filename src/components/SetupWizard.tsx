@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS public.media_items (
 -- 3. Gallery Settings Table
 CREATE TABLE IF NOT EXISTS public.gallery_settings (
     id TEXT PRIMARY KEY DEFAULT 'default',
-    gallery_name TEXT DEFAULT 'foto',
-    owner_name TEXT DEFAULT 'Elena Rostova',
+    gallery_name TEXT DEFAULT 'Bipin''s Personal Gallery',
+    owner_name TEXT DEFAULT 'Bipin Yadav',
     profile_photo_path TEXT,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -114,8 +114,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   // Form states
   const [supabaseUrl, setSupabaseUrl] = useState(config.supabaseUrl || '');
   const [supabaseAnonKey, setSupabaseAnonKey] = useState(config.supabaseAnonKey || '');
-  const [galleryName, setGalleryName] = useState(config.galleryName || 'foto');
-  const [ownerName, setOwnerName] = useState(config.ownerName || 'Elena Rostova');
+  const [galleryName, setGalleryName] = useState(config.galleryName || "Bipin's Personal Gallery");
+  const [ownerName, setOwnerName] = useState(config.ownerName || 'Bipin Yadav');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState(config.profilePhotoUrl || '');
   const [viewerPassword, setViewerPassword] = useState(config.viewerPassword || 'viewer123');
   const [adminPassword, setAdminPassword] = useState(config.adminPassword || 'admin123');

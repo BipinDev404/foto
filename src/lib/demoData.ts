@@ -5,11 +5,11 @@
 
 import { Folder, MediaItem } from '../types/gallery';
 
-// High quality resilient aesthetic photos for default folders
+// High quality resilient aesthetic photos for default folders in Bipin Yadav's personal gallery
 export const INITIAL_DEMO_FOLDERS: Folder[] = [
   {
     id: 'folder-1',
-    name: 'Moments & Travel',
+    name: "Bipin's Trips & Travels",
     cover_url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=85',
     cover_thumbnail_url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=75',
     position: 0,
@@ -18,7 +18,7 @@ export const INITIAL_DEMO_FOLDERS: Folder[] = [
   },
   {
     id: 'folder-2',
-    name: 'Architecture & Minimal',
+    name: 'Architecture & Cityscapes',
     cover_url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=85',
     cover_thumbnail_url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=400&q=75',
     position: 1,
@@ -27,7 +27,7 @@ export const INITIAL_DEMO_FOLDERS: Folder[] = [
   },
   {
     id: 'folder-3',
-    name: 'Portraits & Film',
+    name: 'Personal Portraits & Moments',
     cover_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=85',
     cover_thumbnail_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=75',
     position: 2,

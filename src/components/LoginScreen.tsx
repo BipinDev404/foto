@@ -73,11 +73,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         </div>
 
         {/* Gallery Owner Name */}
-        <h1 className="text-2xl font-semibold tracking-tight text-[#1D1D1F] dark:text-[#F5F5F7] mb-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-[#1D1D1F] dark:text-[#F5F5F7] mb-0.5">
           {config.ownerName}
         </h1>
-        <p className="text-sm font-normal text-[#6E6E73] dark:text-[#86868B] mb-8">
-          {config.galleryName}
+        <p className="text-xs font-normal text-[#6E6E73] dark:text-[#86868B] mb-8">
+          {config.galleryName} • {config.adminEmail}
         </p>
 
         {/* Password Form with Apple Pill Style */}

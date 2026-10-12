@@ -7,8 +7,8 @@ import { GalleryConfig } from '../types/gallery';
 
 const CONFIG_STORAGE_KEY = 'foto_gallery_custom_config';
 
-// Default default profile photo (warm aesthetic Apple-style SVG portrait)
-export const DEFAULT_AVATAR_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23E5E5EA"/><stop offset="100%" stop-color="%23C7C7CC"/></linearGradient><linearGradient id="p" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2348484A"/><stop offset="100%" stop-color="%231C1C1E"/></linearGradient></defs><rect width="200" height="200" rx="100" fill="url(%23g)"/><circle cx="100" cy="80" r="38" fill="url(%23p)"/><path d="M42 178 C52 135 74 125 100 125 C126 125 148 135 158 178 Z" fill="url(%23p)"/></svg>`;
+// Default profile photo for Bipin Yadav (stylish Apple aesthetic avatar with BY monogram)
+export const DEFAULT_AVATAR_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200"><defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%230071E3"/><stop offset="100%" stop-color="%23003B73"/></linearGradient></defs><rect width="200" height="200" rx="100" fill="url(%23bg)"/><text x="100" y="118" font-family="-apple-system,BlinkMacSystemFont,SF Pro Display,sans-serif" font-size="72" font-weight="700" fill="%23FFFFFF" text-anchor="middle">BY</text></svg>`;
 
 const DEFAULT_SUPABASE_URL = 'https://xgicdovcamnzuwdjvwfl.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
@@ -28,11 +28,11 @@ export function getInitialConfig(): GalleryConfig {
       return {
         supabaseUrl: url,
         supabaseAnonKey: key,
-        galleryName: parsed.galleryName || import.meta.env.VITE_GALLERY_NAME || 'foto',
-        ownerName: parsed.ownerName || import.meta.env.VITE_OWNER_NAME || 'Elena Rostova',
+        galleryName: parsed.galleryName || import.meta.env.VITE_GALLERY_NAME || "Bipin's Personal Gallery",
+        ownerName: parsed.ownerName || import.meta.env.VITE_OWNER_NAME || 'Bipin Yadav',
         profilePhotoUrl: parsed.profilePhotoUrl || import.meta.env.VITE_PROFILE_PHOTO_URL || DEFAULT_AVATAR_SVG,
-        viewerEmail: parsed.viewerEmail || 'viewer@foto.gallery',
-        adminEmail: parsed.adminEmail || 'admin@foto.gallery',
+        viewerEmail: parsed.viewerEmail || 'viewer@bipinyadav.com',
+        adminEmail: parsed.adminEmail || 'bipinonlyforfun@gmail.com',
         viewerPassword: parsed.viewerPassword || import.meta.env.VITE_VIEWER_PASSWORD || 'viewer123',
         adminPassword: parsed.adminPassword || import.meta.env.VITE_ADMIN_PASSWORD || 'admin123',
         isCustomConfigured: true,
@@ -45,11 +45,11 @@ export function getInitialConfig(): GalleryConfig {
   return {
     supabaseUrl: envUrl,
     supabaseAnonKey: envKey,
-    galleryName: import.meta.env.VITE_GALLERY_NAME || 'foto',
-    ownerName: import.meta.env.VITE_OWNER_NAME || 'Elena Rostova',
+    galleryName: import.meta.env.VITE_GALLERY_NAME || "Bipin's Personal Gallery",
+    ownerName: import.meta.env.VITE_OWNER_NAME || 'Bipin Yadav',
     profilePhotoUrl: import.meta.env.VITE_PROFILE_PHOTO_URL || DEFAULT_AVATAR_SVG,
-    viewerEmail: 'viewer@foto.gallery',
-    adminEmail: 'admin@foto.gallery',
+    viewerEmail: 'viewer@bipinyadav.com',
+    adminEmail: 'bipinonlyforfun@gmail.com',
     viewerPassword: import.meta.env.VITE_VIEWER_PASSWORD || 'viewer123',
     adminPassword: import.meta.env.VITE_ADMIN_PASSWORD || 'admin123',
     isCustomConfigured: true,

@@ -148,6 +148,9 @@ export default function App() {
       {/* Top Bar with Frosted Glass */}
       <TopBar
         galleryName={config.galleryName}
+        ownerName={config.ownerName}
+        profilePhotoUrl={config.profilePhotoUrl}
+        userEmail={config.adminEmail}
         currentFolder={currentFolder}
         onNavigateHome={() => {
           setSelectedFolderId(null);
