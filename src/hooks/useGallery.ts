@@ -12,6 +12,14 @@ import {
   getStoredDemoMedia,
   saveStoredDemoMedia,
 } from '../lib/demoData';
+import {
+  loadPersistentFolders,
+  savePersistentFolders,
+  loadPersistentMedia,
+  savePersistentMedia,
+  savePersistentBlob,
+  getPersistentBlobUrl,
+} from '../lib/persistentStorage';
 import { processImageBeforeUpload, processVideoBeforeUpload } from '../lib/imageProcessor';
 
 export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDemo = false) {
@@ -49,7 +57,7 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
           throw error;
         }
 
-        if (data) {
+        if (data && data.length > 0) {
           const mapped: Folder[] = await Promise.all(
             data.map(async (row) => {
               let coverUrl = row.cover_url;
@@ -69,24 +77,36 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
           );
 
           setFolders(mapped);
+          savePersistentFolders(mapped).catch(console.warn);
           setIsDemoMode(!sessionInfo.hasSession || !sessionInfo.isAdmin);
           setIsLoadingFolders(false);
           return;
         }
       } catch (err) {
-        console.warn('Could not query Supabase folders, falling back to local/demo data:', err);
+        console.warn('Could not query Supabase folders, falling back to local persistent data:', err);
       }
     }
 
-    // Fallback: Local / Demo Folders
-    const demoFolders = getStoredDemoFolders();
-    const demoMedia = getStoredDemoMedia();
-    const foldersWithCount = demoFolders.map((f) => ({
-      ...f,
-      item_count: demoMedia.filter((m) => m.folder_id === f.id).length,
-    }));
+    // Fallback: Local / IndexedDB Persistent Folders
+    try {
+      const storedFolders = await loadPersistentFolders();
+      const storedMedia = await loadPersistentMedia();
+      const foldersWithCount = storedFolders.map((f) => ({
+        ...f,
+        item_count: storedMedia.filter((m) => m.folder_id === f.id).length,
+      }));
 
-    setFolders(foldersWithCount);
+      setFolders(foldersWithCount);
+    } catch {
+      const demoFolders = getStoredDemoFolders();
+      const demoMedia = getStoredDemoMedia();
+      const foldersWithCount = demoFolders.map((f) => ({
+        ...f,
+        item_count: demoMedia.filter((m) => m.folder_id === f.id).length,
+      }));
+      setFolders(foldersWithCount);
+    }
+
     setIsDemoMode(true);
     setIsLoadingFolders(false);
   }, [config, isAuthDemo]);
@@ -133,12 +153,18 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
         }
       }
 
-      // Demo/Local media
-      const allDemo = getStoredDemoMedia();
-      const filtered = allDemo.filter((m) => m.folder_id === folderId);
-      // Sort by position
-      filtered.sort((a, b) => a.position - b.position);
-      setMediaItems(filtered);
+      // Fallback: Persistent local / IndexedDB media
+      try {
+        const storedMedia = await loadPersistentMedia();
+        const filtered = storedMedia.filter((m) => m.folder_id === folderId);
+        filtered.sort((a, b) => a.position - b.position);
+        setMediaItems(filtered);
+      } catch {
+        const allDemo = getStoredDemoMedia();
+        const filtered = allDemo.filter((m) => m.folder_id === folderId);
+        filtered.sort((a, b) => a.position - b.position);
+        setMediaItems(filtered);
+      }
       setIsLoadingMedia(false);
     },
     [config, isDemoMode, isAuthDemo]
@@ -227,6 +253,7 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
     const updated = [...folders, newFolder];
     setFolders(updated);
     saveStoredDemoFolders(updated);
+    savePersistentFolders(updated).catch(console.warn);
     return newFolder;
   };
 
@@ -246,9 +273,9 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
       }
     }
 
-    setFolders((prev) =>
-      prev.map((f) => (f.id === folderId ? { ...f, name: trimmed } : f))
-    );
+    const updatedFolders = folders.map((f) => (f.id === folderId ? { ...f, name: trimmed } : f));
+    setFolders(updatedFolders);
+    savePersistentFolders(updatedFolders).catch(console.warn);
 
     if (isDemoMode) {
       const demo = getStoredDemoFolders().map((f) =>
@@ -271,9 +298,20 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
       }
     }
 
-    setFolders((prev) => prev.filter((f) => f.id !== folderId));
+    const updatedFolders = folders.filter((f) => f.id !== folderId);
+    setFolders(updatedFolders);
+    savePersistentFolders(updatedFolders).catch(console.warn);
+
     if (selectedFolderId === folderId) {
       setSelectedFolderId(null);
+    }
+
+    try {
+      const persistentM = await loadPersistentMedia();
+      const kept = persistentM.filter((m) => m.folder_id !== folderId);
+      savePersistentMedia(kept).catch(console.warn);
+    } catch {
+      // ignore
     }
 
     if (isDemoMode) {
@@ -287,6 +325,7 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
   const reorderFolders = async (reordered: Folder[]) => {
     const updatedWithPos = reordered.map((f, idx) => ({ ...f, position: idx }));
     setFolders(updatedWithPos);
+    savePersistentFolders(updatedWithPos).catch(console.warn);
 
     const client = getSupabaseClient(config);
     if (client && !isDemoMode && !isAuthDemo) {
@@ -322,9 +361,9 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
       }
     }
 
-    setFolders((prev) =>
-      prev.map((f) => (f.id === folderId ? { ...f, cover_url: coverUrl } : f))
-    );
+    const updatedFolders = folders.map((f) => (f.id === folderId ? { ...f, cover_url: coverUrl } : f));
+    setFolders(updatedFolders);
+    savePersistentFolders(updatedFolders).catch(console.warn);
 
     if (isDemoMode) {
       const demo = getStoredDemoFolders().map((f) =>
@@ -358,7 +397,14 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
     if (isDemoMode) {
       const allDemo = getStoredDemoMedia();
       const otherFolderMedia = allDemo.filter((m) => m.folder_id !== selectedFolderId);
-      saveStoredDemoMedia([...otherFolderMedia, ...updatedWithPos]);
+      const combined = [...otherFolderMedia, ...updatedWithPos];
+      saveStoredDemoMedia(combined);
+      savePersistentMedia(combined).catch(console.warn);
+    } else {
+      loadPersistentMedia().then((currentPersistent) => {
+        const other = currentPersistent.filter((m) => m.folder_id !== selectedFolderId);
+        savePersistentMedia([...other, ...updatedWithPos]).catch(console.warn);
+      }).catch(console.warn);
     }
   };
 
@@ -386,6 +432,11 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
           : f
       )
     );
+
+    loadPersistentMedia().then((currentPersistent) => {
+      const kept = currentPersistent.filter((m) => !itemIds.includes(m.id));
+      savePersistentMedia(kept).catch(console.warn);
+    }).catch(console.warn);
 
     if (isDemoMode) {
       const demo = getStoredDemoMedia().filter((m) => !itemIds.includes(m.id));
@@ -425,6 +476,13 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
         return f;
       })
     );
+
+    loadPersistentMedia().then((currentPersistent) => {
+      const updated = currentPersistent.map((m) =>
+        itemIds.includes(m.id) ? { ...m, folder_id: targetFolderId } : m
+      );
+      savePersistentMedia(updated).catch(console.warn);
+    }).catch(console.warn);
 
     if (isDemoMode) {
       const demo = getStoredDemoMedia().map((m) =>
@@ -577,7 +635,15 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
         }
 
         if (!uploadedCloud) {
-          // Local/Demo storage using ObjectURLs
+          // Local/Demo persistent storage using IndexedDB Blobs
+          const blobId = `blob_${Date.now()}_${i}`;
+          const thumbBlobId = `thumb_${Date.now()}_${i}`;
+
+          await savePersistentBlob(blobId, processedBlob);
+          if (thumbBlob) {
+            await savePersistentBlob(thumbBlobId, thumbBlob);
+          }
+
           const localUrl = URL.createObjectURL(processedBlob);
           const localThumbUrl = thumbBlob ? URL.createObjectURL(thumbBlob) : localUrl;
 
@@ -586,7 +652,8 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
             folder_id: targetFolderId,
             name: file.name,
             type: file.type.startsWith('video') ? 'video' : 'image',
-            storage_path: localUrl,
+            storage_path: `blob-ref:${blobId}`,
+            thumbnail_path: thumbBlob ? `blob-ref:${thumbBlobId}` : undefined,
             url: localUrl,
             thumbnail_url: localThumbUrl,
             size: processedBlob.size,
@@ -603,6 +670,13 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
 
           const currentDemoMedia = getStoredDemoMedia();
           saveStoredDemoMedia([...currentDemoMedia, newMediaItem]);
+
+          try {
+            const currentPersistent = await loadPersistentMedia();
+            await savePersistentMedia([...currentPersistent, newMediaItem]);
+          } catch {
+            // ignore
+          }
         }
 
         // Set folder cover if folder currently has no cover
@@ -613,14 +687,17 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
           setFolderCover(targetFolderId, coverPath);
         }
 
-        // Update count
-        setFolders((prev) =>
-          prev.map((f) =>
+        // Update count and save
+        setFolders((prev) => {
+          const updated = prev.map((f) =>
             f.id === targetFolderId
               ? { ...f, item_count: (f.item_count || 0) + 1 }
               : f
-          )
-        );
+          );
+          savePersistentFolders(updated).catch(console.warn);
+          saveStoredDemoFolders(updated);
+          return updated;
+        });
 
         setUploadQueue((prev) =>
           prev.map((item) =>

@@ -221,7 +221,10 @@ const LOCAL_MEDIA_KEY = 'foto_demo_media_data';
 export function getStoredDemoFolders(): Folder[] {
   try {
     const raw = localStorage.getItem(LOCAL_FOLDERS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
   } catch (e) {
     console.warn(e);
   }
@@ -239,7 +242,10 @@ export function saveStoredDemoFolders(folders: Folder[]): void {
 export function getStoredDemoMedia(): MediaItem[] {
   try {
     const raw = localStorage.getItem(LOCAL_MEDIA_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
   } catch (e) {
     console.warn(e);
   }
@@ -253,3 +259,4 @@ export function saveStoredDemoMedia(media: MediaItem[]): void {
     console.error(e);
   }
 }
+
