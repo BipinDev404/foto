@@ -3,33 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Folder, MediaItem, GalleryConfig, UploadProgressItem } from '../types/gallery';
-import { getSupabaseClient, getSignedMediaUrl, getActiveSupabaseSession } from '../lib/supabase';
 import {
-  getStoredDemoFolders,
-  saveStoredDemoFolders,
-  getStoredDemoMedia,
-  saveStoredDemoMedia,
-} from '../lib/demoData';
-import {
-  loadPersistentFolders,
-  savePersistentFolders,
-  loadPersistentMedia,
-  savePersistentMedia,
-  savePersistentBlob,
-  getPersistentBlobUrl,
-} from '../lib/persistentStorage';
+  subscribeToFolders,
+  subscribeToFolderMedia,
+  createCloudFolder,
+  renameCloudFolder,
+  deleteCloudFolder,
+  reorderCloudFolders,
+  setCloudFolderCover,
+  reorderCloudMediaItems,
+  deleteCloudMediaItems,
+  moveCloudMediaItems,
+  uploadMediaToCloudStorage,
+} from '../lib/firebaseSync';
 import { processImageBeforeUpload, processVideoBeforeUpload } from '../lib/imageProcessor';
 
-export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDemo = false) {
+export function useGallery(config: GalleryConfig, isLoggedIn: boolean, _isAuthDemo = false) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [isLoadingFolders, setIsLoadingFolders] = useState(true);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Upload tracking state
   const [uploadQueue, setUploadQueue] = useState<UploadProgressItem[]>([]);
@@ -40,149 +37,35 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
     return folders.find((f) => f.id === selectedFolderId) || null;
   }, [folders, selectedFolderId]);
 
-  // Load Folders
-  const loadFolders = useCallback(async () => {
+  // Subscribe to Folders in Realtime across all devices via Firestore
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
     setIsLoadingFolders(true);
-    const client = getSupabaseClient(config);
+    const unsubscribe = subscribeToFolders((cloudFolders) => {
+      setFolders(cloudFolders);
+      setIsLoadingFolders(false);
+    });
 
-    if (client && !isAuthDemo) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        const { data, error } = await client
-          .from('folders')
-          .select('*, media_items(count)')
-          .order('position', { ascending: true });
+    return () => unsubscribe();
+  }, [isLoggedIn]);
 
-        if (error) {
-          throw error;
-        }
-
-        if (data && data.length > 0) {
-          const mapped: Folder[] = await Promise.all(
-            data.map(async (row) => {
-              let coverUrl = row.cover_url;
-              if (coverUrl && !coverUrl.startsWith('http') && !coverUrl.startsWith('data:')) {
-                coverUrl = await getSignedMediaUrl(coverUrl, config);
-              }
-              const count = row.media_items?.[0]?.count || 0;
-              return {
-                id: row.id,
-                name: row.name,
-                cover_url: coverUrl,
-                position: row.position,
-                item_count: count,
-                created_at: row.created_at,
-              };
-            })
-          );
-
-          setFolders(mapped);
-          savePersistentFolders(mapped).catch(console.warn);
-          setIsDemoMode(!sessionInfo.hasSession || !sessionInfo.isAdmin);
-          setIsLoadingFolders(false);
-          return;
-        }
-      } catch (err) {
-        console.warn('Could not query Supabase folders, falling back to local persistent data:', err);
-      }
-    }
-
-    // Fallback: Local / IndexedDB Persistent Folders
-    try {
-      const storedFolders = await loadPersistentFolders();
-      const storedMedia = await loadPersistentMedia();
-      const foldersWithCount = storedFolders.map((f) => ({
-        ...f,
-        item_count: storedMedia.filter((m) => m.folder_id === f.id).length,
-      }));
-
-      setFolders(foldersWithCount);
-    } catch {
-      const demoFolders = getStoredDemoFolders();
-      const demoMedia = getStoredDemoMedia();
-      const foldersWithCount = demoFolders.map((f) => ({
-        ...f,
-        item_count: demoMedia.filter((m) => m.folder_id === f.id).length,
-      }));
-      setFolders(foldersWithCount);
-    }
-
-    setIsDemoMode(true);
-    setIsLoadingFolders(false);
-  }, [config, isAuthDemo]);
-
-  // Load Media Items for Selected Folder
-  const loadMediaForFolder = useCallback(
-    async (folderId: string) => {
-      setIsLoadingMedia(true);
-      const client = getSupabaseClient(config);
-
-      if (client && !isDemoMode && !isAuthDemo && !folderId.startsWith('folder-')) {
-        try {
-          const { data, error } = await client
-            .from('media_items')
-            .select('*')
-            .eq('folder_id', folderId)
-            .order('position', { ascending: true });
-
-          if (error) throw error;
-
-          if (data) {
-            // Resolve private signed URLs
-            const resolved: MediaItem[] = await Promise.all(
-              data.map(async (item) => {
-                const signedUrl = await getSignedMediaUrl(item.storage_path, config);
-                const signedThumbUrl = item.thumbnail_path
-                  ? await getSignedMediaUrl(item.thumbnail_path, config)
-                  : signedUrl;
-
-                return {
-                  ...item,
-                  url: signedUrl || undefined,
-                  thumbnail_url: signedThumbUrl || undefined,
-                };
-              })
-            );
-
-            setMediaItems(resolved);
-            setIsLoadingMedia(false);
-            return;
-          }
-        } catch (err) {
-          console.warn('Could not load Supabase media items, checking demo data:', err);
-        }
-      }
-
-      // Fallback: Persistent local / IndexedDB media
-      try {
-        const storedMedia = await loadPersistentMedia();
-        const filtered = storedMedia.filter((m) => m.folder_id === folderId);
-        filtered.sort((a, b) => a.position - b.position);
-        setMediaItems(filtered);
-      } catch {
-        const allDemo = getStoredDemoMedia();
-        const filtered = allDemo.filter((m) => m.folder_id === folderId);
-        filtered.sort((a, b) => a.position - b.position);
-        setMediaItems(filtered);
-      }
-      setIsLoadingMedia(false);
-    },
-    [config, isDemoMode, isAuthDemo]
-  );
-
+  // Subscribe to Media Items for selected folder in Realtime across all devices
   useEffect(() => {
-    if (isLoggedIn) {
-      loadFolders();
-    }
-  }, [isLoggedIn, loadFolders]);
-
-  useEffect(() => {
-    if (selectedFolderId) {
-      loadMediaForFolder(selectedFolderId);
-    } else {
+    if (!isLoggedIn || !selectedFolderId) {
       setMediaItems([]);
+      setIsLoadingMedia(false);
+      return;
     }
-  }, [selectedFolderId, loadMediaForFolder]);
+
+    setIsLoadingMedia(true);
+    const unsubscribe = subscribeToFolderMedia(selectedFolderId, (items) => {
+      setMediaItems(items);
+      setIsLoadingMedia(false);
+    });
+
+    return () => unsubscribe();
+  }, [isLoggedIn, selectedFolderId]);
 
   // Search filter
   const filteredFolders = useMemo(() => {
@@ -197,302 +80,52 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
     return mediaItems.filter((m) => m.name.toLowerCase().includes(q));
   }, [mediaItems, searchQuery]);
 
-  // Folder Actions
+  // Folder Actions synced with Cloud
   const createFolder = async (name: string): Promise<Folder | null> => {
     const trimmed = name.trim();
     if (!trimmed) return null;
-
     const newPosition = folders.length;
-    const client = getSupabaseClient(config);
-
-    if (client && !isDemoMode && !isAuthDemo) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        if (!sessionInfo.hasSession || !sessionInfo.isAdmin) {
-          setIsDemoMode(true);
-        } else {
-          const { data, error } = await client
-            .from('folders')
-            .insert([{ name: trimmed, position: newPosition }])
-            .select()
-            .single();
-
-          if (error) {
-            if (error.code === '42501') {
-              console.warn('Supabase RLS: Insufficient privileges. Saving folder locally.');
-              setIsDemoMode(true);
-            } else {
-              throw error;
-            }
-          } else if (data) {
-            const newFolder: Folder = {
-              id: data.id,
-              name: data.name,
-              position: data.position,
-              item_count: 0,
-              created_at: data.created_at,
-            };
-            setFolders((prev) => [...prev, newFolder]);
-            return newFolder;
-          }
-        }
-      } catch (err: any) {
-        console.warn('Error creating folder in Supabase, saving locally:', err?.message || err);
-        setIsDemoMode(true);
-      }
-    }
-
-    // Local / Demo creation
-    const newFolder: Folder = {
-      id: `folder-${Date.now()}`,
-      name: trimmed,
-      position: newPosition,
-      item_count: 0,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [...folders, newFolder];
-    setFolders(updated);
-    saveStoredDemoFolders(updated);
-    savePersistentFolders(updated).catch(console.warn);
-    return newFolder;
+    return await createCloudFolder(trimmed, newPosition);
   };
 
   const renameFolder = async (folderId: string, newName: string) => {
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-
-    const client = getSupabaseClient(config);
-    if (client && !isDemoMode && !isAuthDemo && !folderId.startsWith('folder-')) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
-          await client.from('folders').update({ name: trimmed }).eq('id', folderId);
-        }
-      } catch (e: any) {
-        console.warn('Rename folder Supabase error:', e?.message || e);
-      }
-    }
-
-    const updatedFolders = folders.map((f) => (f.id === folderId ? { ...f, name: trimmed } : f));
-    setFolders(updatedFolders);
-    savePersistentFolders(updatedFolders).catch(console.warn);
-
-    if (isDemoMode) {
-      const demo = getStoredDemoFolders().map((f) =>
-        f.id === folderId ? { ...f, name: trimmed } : f
-      );
-      saveStoredDemoFolders(demo);
-    }
+    if (!newName.trim()) return;
+    await renameCloudFolder(folderId, newName);
   };
 
   const deleteFolder = async (folderId: string) => {
-    const client = getSupabaseClient(config);
-    if (client && !isDemoMode && !isAuthDemo && !folderId.startsWith('folder-')) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
-          await client.from('folders').delete().eq('id', folderId);
-        }
-      } catch (e: any) {
-        console.warn('Delete folder Supabase error:', e?.message || e);
-      }
-    }
-
-    const updatedFolders = folders.filter((f) => f.id !== folderId);
-    setFolders(updatedFolders);
-    savePersistentFolders(updatedFolders).catch(console.warn);
-
+    await deleteCloudFolder(folderId);
     if (selectedFolderId === folderId) {
       setSelectedFolderId(null);
-    }
-
-    try {
-      const persistentM = await loadPersistentMedia();
-      const kept = persistentM.filter((m) => m.folder_id !== folderId);
-      savePersistentMedia(kept).catch(console.warn);
-    } catch {
-      // ignore
-    }
-
-    if (isDemoMode) {
-      const demoF = getStoredDemoFolders().filter((f) => f.id !== folderId);
-      saveStoredDemoFolders(demoF);
-      const demoM = getStoredDemoMedia().filter((m) => m.folder_id !== folderId);
-      saveStoredDemoMedia(demoM);
     }
   };
 
   const reorderFolders = async (reordered: Folder[]) => {
-    const updatedWithPos = reordered.map((f, idx) => ({ ...f, position: idx }));
-    setFolders(updatedWithPos);
-    savePersistentFolders(updatedWithPos).catch(console.warn);
-
-    const client = getSupabaseClient(config);
-    if (client && !isDemoMode && !isAuthDemo) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
-          for (const f of updatedWithPos) {
-            if (!f.id.startsWith('folder-')) {
-              await client.from('folders').update({ position: f.position }).eq('id', f.id);
-            }
-          }
-        }
-      } catch (e: any) {
-        console.warn('Reorder folders error:', e?.message || e);
-      }
-    }
-
-    if (isDemoMode) {
-      saveStoredDemoFolders(updatedWithPos);
-    }
+    setFolders(reordered);
+    await reorderCloudFolders(reordered);
   };
 
   const setFolderCover = async (folderId: string, coverUrl: string) => {
-    const client = getSupabaseClient(config);
-    if (client && !isDemoMode && !isAuthDemo && !folderId.startsWith('folder-')) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
-          await client.from('folders').update({ cover_url: coverUrl }).eq('id', folderId);
-        }
-      } catch (e: any) {
-        console.warn('Error setting cover image:', e?.message || e);
-      }
-    }
-
-    const updatedFolders = folders.map((f) => (f.id === folderId ? { ...f, cover_url: coverUrl } : f));
-    setFolders(updatedFolders);
-    savePersistentFolders(updatedFolders).catch(console.warn);
-
-    if (isDemoMode) {
-      const demo = getStoredDemoFolders().map((f) =>
-        f.id === folderId ? { ...f, cover_url: coverUrl } : f
-      );
-      saveStoredDemoFolders(demo);
-    }
+    await setCloudFolderCover(folderId, coverUrl);
   };
 
-  // Media Actions
+  // Media Actions synced with Cloud
   const reorderMediaItems = async (reordered: MediaItem[]) => {
-    const updatedWithPos = reordered.map((m, idx) => ({ ...m, position: idx }));
-    setMediaItems(updatedWithPos);
-
-    const client = getSupabaseClient(config);
-    if (client && !isDemoMode && !isAuthDemo && selectedFolderId && !selectedFolderId.startsWith('folder-')) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
-          for (const m of updatedWithPos) {
-            if (!m.id.startsWith('media-')) {
-              await client.from('media_items').update({ position: m.position }).eq('id', m.id);
-            }
-          }
-        }
-      } catch (e: any) {
-        console.warn('Reorder media error:', e?.message || e);
-      }
-    }
-
-    if (isDemoMode) {
-      const allDemo = getStoredDemoMedia();
-      const otherFolderMedia = allDemo.filter((m) => m.folder_id !== selectedFolderId);
-      const combined = [...otherFolderMedia, ...updatedWithPos];
-      saveStoredDemoMedia(combined);
-      savePersistentMedia(combined).catch(console.warn);
-    } else {
-      loadPersistentMedia().then((currentPersistent) => {
-        const other = currentPersistent.filter((m) => m.folder_id !== selectedFolderId);
-        savePersistentMedia([...other, ...updatedWithPos]).catch(console.warn);
-      }).catch(console.warn);
-    }
+    setMediaItems(reordered);
+    await reorderCloudMediaItems(reordered);
   };
 
   const deleteMediaItems = async (itemIds: string[]) => {
     if (!itemIds.length) return;
-
-    const client = getSupabaseClient(config);
-    const dbItemIds = itemIds.filter((id) => !id.startsWith('media-'));
-    if (client && !isDemoMode && !isAuthDemo && dbItemIds.length > 0) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
-          await client.from('media_items').delete().in('id', dbItemIds);
-        }
-      } catch (e: any) {
-        console.warn('Delete items error:', e?.message || e);
-      }
-    }
-
-    setMediaItems((prev) => prev.filter((m) => !itemIds.includes(m.id)));
-    setFolders((prev) =>
-      prev.map((f) =>
-        f.id === selectedFolderId
-          ? { ...f, item_count: Math.max(0, (f.item_count || 0) - itemIds.length) }
-          : f
-      )
-    );
-
-    loadPersistentMedia().then((currentPersistent) => {
-      const kept = currentPersistent.filter((m) => !itemIds.includes(m.id));
-      savePersistentMedia(kept).catch(console.warn);
-    }).catch(console.warn);
-
-    if (isDemoMode) {
-      const demo = getStoredDemoMedia().filter((m) => !itemIds.includes(m.id));
-      saveStoredDemoMedia(demo);
-    }
+    await deleteCloudMediaItems(itemIds, selectedFolderId);
   };
 
   const moveMediaItems = async (itemIds: string[], targetFolderId: string) => {
     if (!itemIds.length || !targetFolderId || targetFolderId === selectedFolderId) return;
-
-    const client = getSupabaseClient(config);
-    const dbItemIds = itemIds.filter((id) => !id.startsWith('media-'));
-    if (client && !isDemoMode && !isAuthDemo && !targetFolderId.startsWith('folder-') && dbItemIds.length > 0) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        if (sessionInfo.hasSession && sessionInfo.isAdmin) {
-          await client
-            .from('media_items')
-            .update({ folder_id: targetFolderId })
-            .in('id', dbItemIds);
-        }
-      } catch (e: any) {
-        console.warn('Move items error:', e?.message || e);
-      }
-    }
-
-    setMediaItems((prev) => prev.filter((m) => !itemIds.includes(m.id)));
-    // Update folder counts
-    setFolders((prev) =>
-      prev.map((f) => {
-        if (f.id === selectedFolderId) {
-          return { ...f, item_count: Math.max(0, (f.item_count || 0) - itemIds.length) };
-        }
-        if (f.id === targetFolderId) {
-          return { ...f, item_count: (f.item_count || 0) + itemIds.length };
-        }
-        return f;
-      })
-    );
-
-    loadPersistentMedia().then((currentPersistent) => {
-      const updated = currentPersistent.map((m) =>
-        itemIds.includes(m.id) ? { ...m, folder_id: targetFolderId } : m
-      );
-      savePersistentMedia(updated).catch(console.warn);
-    }).catch(console.warn);
-
-    if (isDemoMode) {
-      const demo = getStoredDemoMedia().map((m) =>
-        itemIds.includes(m.id) ? { ...m, folder_id: targetFolderId } : m
-      );
-      saveStoredDemoMedia(demo);
-    }
+    await moveCloudMediaItems(itemIds, targetFolderId, selectedFolderId);
   };
 
-  // Upload handler with client-side canvas resizing (2000px max, 0.85 quality, 400px thumb)
+  // Upload handler with client processing & Cloud Storage sync
   const uploadFiles = async (files: File[], targetFolderId: string) => {
     if (!files.length || !targetFolderId) return;
 
@@ -507,16 +140,6 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
     }));
 
     setUploadQueue(initialQueue);
-    const client = getSupabaseClient(config);
-    let canUploadCloud = false;
-    if (client && !isDemoMode && !isAuthDemo && !targetFolderId.startsWith('folder-')) {
-      try {
-        const sessionInfo = await getActiveSupabaseSession(client);
-        canUploadCloud = sessionInfo.hasSession && sessionInfo.isAdmin;
-      } catch {
-        canUploadCloud = false;
-      }
-    }
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -545,167 +168,36 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
           height = res.height;
         }
 
-        // Update progress status to uploading
         setUploadQueue((prev) =>
           prev.map((item) =>
             item.id === queueItem.id ? { ...item, progress: 40, status: 'uploading' } : item
           )
         );
 
-        const timestamp = Date.now();
-        const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const mainPath = `${targetFolderId}/${timestamp}_${cleanName}`;
-        const thumbPath = `${targetFolderId}/thumbs/${timestamp}_thumb_${cleanName}.jpg`;
-
-        let uploadedCloud = false;
-
-        if (canUploadCloud && client) {
-          try {
-            // Upload main file to private storage bucket 'foto-media'
-            const { error: uploadErr } = await client.storage
-              .from('foto-media')
-              .upload(mainPath, processedBlob, {
-                cacheControl: '3600',
-                upsert: false,
-                contentType: file.type || 'image/jpeg',
-              });
-
-            if (uploadErr) throw uploadErr;
-
-            // Upload thumbnail
-            if (thumbBlob) {
-              await client.storage.from('foto-media').upload(thumbPath, thumbBlob, {
-                cacheControl: '3600',
-                upsert: false,
-                contentType: 'image/jpeg',
-              });
-            }
-
-            setUploadQueue((prev) =>
-              prev.map((item) =>
-                item.id === queueItem.id ? { ...item, progress: 85 } : item
-              )
-            );
-
-            // Insert media record in database
-            const { data: insertedItem, error: dbErr } = await client
-              .from('media_items')
-              .insert([
-                {
-                  folder_id: targetFolderId,
-                  name: file.name,
-                  type: file.type.startsWith('video') ? 'video' : 'image',
-                  storage_path: mainPath,
-                  thumbnail_path: thumbPath,
-                  size: processedBlob.size,
-                  width,
-                  height,
-                  duration,
-                  position: mediaItems.length + i,
-                },
-              ])
-              .select()
-              .single();
-
-            if (dbErr) throw dbErr;
-
-            // Obtain signed URL for display
-            const signedUrl = await getSignedMediaUrl(mainPath, config);
-            const signedThumbUrl = await getSignedMediaUrl(thumbPath, config);
-
-            if (insertedItem && selectedFolderId === targetFolderId) {
-              setMediaItems((prev) => [
-                ...prev,
-                {
-                  ...insertedItem,
-                  url: signedUrl || undefined,
-                  thumbnail_url: signedThumbUrl || undefined,
-                },
-              ]);
-            }
-            uploadedCloud = true;
-          } catch (cloudErr: any) {
-            console.warn(
-              'Cloud storage/RLS upload failed, using local preview for file:',
-              file.name,
-              cloudErr?.message || cloudErr
-            );
-            uploadedCloud = false;
-          }
-        }
-
-        if (!uploadedCloud) {
-          // Local/Demo persistent storage using IndexedDB Blobs
-          const blobId = `blob_${Date.now()}_${i}`;
-          const thumbBlobId = `thumb_${Date.now()}_${i}`;
-
-          await savePersistentBlob(blobId, processedBlob);
-          if (thumbBlob) {
-            await savePersistentBlob(thumbBlobId, thumbBlob);
-          }
-
-          const localUrl = URL.createObjectURL(processedBlob);
-          const localThumbUrl = thumbBlob ? URL.createObjectURL(thumbBlob) : localUrl;
-
-          const newMediaItem: MediaItem = {
-            id: `media-${Date.now()}-${i}`,
-            folder_id: targetFolderId,
-            name: file.name,
+        // Upload to Cloud Storage & Firestore in real time
+        const resultItem = await uploadMediaToCloudStorage(
+          processedBlob,
+          thumbBlob,
+          file.name,
+          targetFolderId,
+          {
             type: file.type.startsWith('video') ? 'video' : 'image',
-            storage_path: `blob-ref:${blobId}`,
-            thumbnail_path: thumbBlob ? `blob-ref:${thumbBlobId}` : undefined,
-            url: localUrl,
-            thumbnail_url: localThumbUrl,
-            size: processedBlob.size,
             width,
             height,
             duration,
             position: mediaItems.length + i,
-            created_at: new Date().toISOString(),
-          };
-
-          if (selectedFolderId === targetFolderId) {
-            setMediaItems((prev) => [...prev, newMediaItem]);
           }
-
-          const currentDemoMedia = getStoredDemoMedia();
-          saveStoredDemoMedia([...currentDemoMedia, newMediaItem]);
-
-          try {
-            const currentPersistent = await loadPersistentMedia();
-            await savePersistentMedia([...currentPersistent, newMediaItem]);
-          } catch {
-            // ignore
-          }
-        }
-
-        // Set folder cover if folder currently has no cover
-        const targetFolder = folders.find((f) => f.id === targetFolderId);
-        if (targetFolder && !targetFolder.cover_url) {
-          const coverPath =
-            uploadedCloud && client ? mainPath : URL.createObjectURL(processedBlob);
-          setFolderCover(targetFolderId, coverPath);
-        }
-
-        // Update count and save
-        setFolders((prev) => {
-          const updated = prev.map((f) =>
-            f.id === targetFolderId
-              ? { ...f, item_count: (f.item_count || 0) + 1 }
-              : f
-          );
-          savePersistentFolders(updated).catch(console.warn);
-          saveStoredDemoFolders(updated);
-          return updated;
-        });
-
-        setUploadQueue((prev) =>
-          prev.map((item) =>
-            item.id === queueItem.id ? { ...item, progress: 100, status: 'completed' } : item
-          )
         );
+
+        if (resultItem) {
+          setUploadQueue((prev) =>
+            prev.map((item) =>
+              item.id === queueItem.id ? { ...item, progress: 100, status: 'completed' } : item
+            )
+          );
+        }
       } catch (err: any) {
-        console.warn('Error during upload of file:', file.name, err?.message || err);
+        console.warn('Error during cloud upload of file:', file.name, err?.message || err);
         setUploadQueue((prev) =>
           prev.map((item) =>
             item.id === queueItem.id
@@ -733,7 +225,7 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
     isLoadingMedia,
     searchQuery,
     setSearchQuery,
-    isDemoMode,
+    isDemoMode: false,
     uploadQueue,
     isUploading,
     createFolder,
@@ -745,6 +237,6 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, isAuthDem
     deleteMediaItems,
     moveMediaItems,
     uploadFiles,
-    refreshFolders: loadFolders,
+    refreshFolders: () => {},
   };
 }

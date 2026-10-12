@@ -1,0 +1,153 @@
+{
+  "entities": {
+    "GalleryConfig": {
+      "title": "GalleryConfig",
+      "description": "Global profile, customization, and settings for Bipin Yadav's personal photo gallery.",
+      "type": "object",
+      "properties": {
+        "galleryName": {
+          "type": "string",
+          "description": "Gallery title"
+        },
+        "ownerName": {
+          "type": "string",
+          "description": "Owner name"
+        },
+        "profilePhotoUrl": {
+          "type": "string",
+          "description": "Profile picture URL or base64 SVG"
+        },
+        "viewerEmail": {
+          "type": "string",
+          "description": "Viewer email"
+        },
+        "adminEmail": {
+          "type": "string",
+          "description": "Admin email"
+        },
+        "viewerPassword": {
+          "type": "string",
+          "description": "Password for viewer role"
+        },
+        "adminPassword": {
+          "type": "string",
+          "description": "Password for admin role"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["galleryName", "ownerName"]
+    },
+    "Folder": {
+      "title": "Folder",
+      "description": "An album folder containing photos and videos.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Folder or album name"
+        },
+        "cover_url": {
+          "type": "string",
+          "description": "Cover photo URL for album"
+        },
+        "position": {
+          "type": "number",
+          "description": "Display order index"
+        },
+        "item_count": {
+          "type": "number",
+          "description": "Count of items in folder"
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO timestamp"
+        }
+      },
+      "required": ["name", "position"]
+    },
+    "MediaItem": {
+      "title": "MediaItem",
+      "description": "A single photo or video item within a folder.",
+      "type": "object",
+      "properties": {
+        "folder_id": {
+          "type": "string",
+          "description": "Associated folder ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "File name"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["image", "video"],
+          "description": "Media type"
+        },
+        "storage_path": {
+          "type": "string",
+          "description": "Storage path or reference"
+        },
+        "thumbnail_path": {
+          "type": "string",
+          "description": "Thumbnail storage path or reference"
+        },
+        "url": {
+          "type": "string",
+          "description": "Public or downloadable media URL"
+        },
+        "thumbnail_url": {
+          "type": "string",
+          "description": "Thumbnail media URL"
+        },
+        "size": {
+          "type": "number",
+          "description": "File size in bytes"
+        },
+        "width": {
+          "type": "number",
+          "description": "Image/Video width"
+        },
+        "height": {
+          "type": "number",
+          "description": "Image/Video height"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Video duration in seconds"
+        },
+        "position": {
+          "type": "number",
+          "description": "Sort order within folder"
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO timestamp"
+        }
+      },
+      "required": ["folder_id", "name", "type", "position"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/GalleryConfig"
+      },
+      "description": "Global gallery configuration document."
+    },
+    "/folders/{folderId}": {
+      "schema": {
+        "$ref": "#/entities/Folder"
+      },
+      "description": "Collection of gallery photo folders and albums."
+    },
+    "/media_items/{mediaId}": {
+      "schema": {
+        "$ref": "#/entities/MediaItem"
+      },
+      "description": "Collection of media items across all folders."
+    }
+  }
+}

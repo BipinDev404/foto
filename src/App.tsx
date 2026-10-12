@@ -21,8 +21,18 @@ import { SetupWizard } from './components/SetupWizard';
 import { FolderSkeletonGrid, MediaSkeletonGrid } from './components/SkeletonLoader';
 import { Sparkles, Sliders } from 'lucide-react';
 
+import { subscribeToGalleryConfig, updateCloudGalleryConfig, DEFAULT_BIPIN_CONFIG } from './lib/firebaseSync';
+
 export default function App() {
   const [config, setConfig] = useState<GalleryConfig>(() => getInitialConfig());
+
+  // Real-time synchronization of gallery settings & profile photo across all devices
+  useEffect(() => {
+    const unsubscribe = subscribeToGalleryConfig((cloudConfig) => {
+      setConfig(cloudConfig);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Dark mode (defaults to system preference)
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -115,9 +125,10 @@ export default function App() {
     handleClearSelection();
   };
 
-  const handleSaveConfig = (updated: Partial<GalleryConfig>) => {
+  const handleSaveConfig = async (updated: Partial<GalleryConfig>) => {
     const saved = saveCustomConfig(updated);
     setConfig(saved);
+    await updateCloudGalleryConfig(updated);
   };
 
   // If user is not logged in, show the Apple-style Login Screen
