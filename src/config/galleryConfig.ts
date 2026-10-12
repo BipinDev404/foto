@@ -10,9 +10,8 @@ const CONFIG_STORAGE_KEY = 'foto_gallery_custom_config';
 // Default profile photo for Bipin Yadav (stylish Apple aesthetic avatar with BY monogram)
 export const DEFAULT_AVATAR_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200"><defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%230071E3"/><stop offset="100%" stop-color="%23003B73"/></linearGradient></defs><rect width="200" height="200" rx="100" fill="url(%23bg)"/><text x="100" y="118" font-family="-apple-system,BlinkMacSystemFont,SF Pro Display,sans-serif" font-size="72" font-weight="700" fill="%23FFFFFF" text-anchor="middle">BY</text></svg>`;
 
-const DEFAULT_SUPABASE_URL = 'https://xgicdovcamnzuwdjvwfl.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnaWNkb3ZjYW1uenV3ZGp2d2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MTgzODQsImV4cCI6MjEwNzM5NDM4NH0.QKkGwsKqPQ-e9IgE4NR9K9EEmPu4WTgvU1MMul_MsDw';
+const DEFAULT_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const DEFAULT_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export function getInitialConfig(): GalleryConfig {
   const envUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;

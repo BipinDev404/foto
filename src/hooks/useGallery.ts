@@ -189,13 +189,11 @@ export function useGallery(config: GalleryConfig, isLoggedIn: boolean, _isAuthDe
           }
         );
 
-        if (resultItem) {
-          setUploadQueue((prev) =>
-            prev.map((item) =>
-              item.id === queueItem.id ? { ...item, progress: 100, status: 'completed' } : item
-            )
-          );
-        }
+        setUploadQueue((prev) =>
+          prev.map((item) =>
+            item.id === queueItem.id ? { ...item, progress: 100, status: 'completed' } : item
+          )
+        );
       } catch (err: any) {
         console.warn('Error during cloud upload of file:', file.name, err?.message || err);
         setUploadQueue((prev) =>

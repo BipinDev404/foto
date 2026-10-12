@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS public.media_items (
 -- 4. Create Gallery Settings Table
 CREATE TABLE IF NOT EXISTS public.gallery_settings (
     id TEXT PRIMARY KEY DEFAULT 'default',
-    gallery_name TEXT DEFAULT 'foto',
-    owner_name TEXT DEFAULT 'Elena Rostova',
+    gallery_name TEXT DEFAULT 'Bipin''s Personal Gallery',
+    owner_name TEXT DEFAULT 'Bipin Yadav',
     profile_photo_path TEXT,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS public.gallery_settings (
 
 -- Insert Default Settings if not exists
 INSERT INTO public.gallery_settings (id, gallery_name, owner_name)
-VALUES ('default', 'foto', 'Elena Rostova')
+VALUES ('default', 'Bipin''s Personal Gallery', 'Bipin Yadav')
 ON CONFLICT (id) DO NOTHING;
 
 -- 5. Helper function to check if current authenticated user is an Admin

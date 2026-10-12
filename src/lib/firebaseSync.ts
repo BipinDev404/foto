@@ -428,21 +428,26 @@ export async function uploadMediaToCloudStorage(
   let thumbDownloadUrl = '';
 
   try {
-    // 1. Upload to Firebase Storage
+    // 1. Attempt upload to Firebase Storage with a 3.5s timeout race so it never hangs
     const fileRef = storageRef(storage, `gallery_uploads/${targetFolderId}/${timestamp}_${cleanName}`);
-    await uploadBytes(fileRef, fileBlob);
+    
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Storage upload timeout, switching to direct cloud sync')), 3500);
+    });
+
+    await Promise.race([uploadBytes(fileRef, fileBlob), timeoutPromise]);
     downloadUrl = await getDownloadURL(fileRef);
 
     if (thumbBlob) {
       const thumbRef = storageRef(storage, `gallery_uploads/${targetFolderId}/thumbs/${timestamp}_thumb_${cleanName}`);
-      await uploadBytes(thumbRef, thumbBlob);
+      await Promise.race([uploadBytes(thumbRef, thumbBlob), timeoutPromise]);
       thumbDownloadUrl = await getDownloadURL(thumbRef);
     } else {
       thumbDownloadUrl = downloadUrl;
     }
   } catch (storageErr) {
-    console.warn('Firebase Storage direct upload notice, falling back to data URL:', storageErr);
-    // Fallback: Convert Blob to Data URL if storage bucket has restrictions
+    console.warn('Firebase Storage upload timeout or fallback notice:', storageErr);
+    // Fallback: Convert Blob to Data URL so photo/video doc is immediately created in Firestore & synced
     const reader = new FileReader();
     downloadUrl = await new Promise<string>((resolve) => {
       reader.onload = () => resolve(reader.result as string);
