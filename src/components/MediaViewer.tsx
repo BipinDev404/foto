@@ -14,8 +14,13 @@ import {
   Trash2,
   Bookmark,
   Share2,
+  Camera,
+  Calendar,
+  Maximize2,
+  Aperture,
 } from 'lucide-react';
 import { MediaItem, UserRole } from '../types/gallery';
+import { getMediaExifData, ImageExifData } from '../lib/exifReader';
 
 interface MediaViewerProps {
   items: MediaItem[];
@@ -40,6 +45,8 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const [scale, setScale] = useState(1);
   const [showInfo, setShowInfo] = useState(false);
   const [copiedNotification, setCopiedNotification] = useState(false);
+  const [exifData, setExifData] = useState<ImageExifData | null>(null);
+  const [isLoadingExif, setIsLoadingExif] = useState(false);
 
   // Touch gesture state
   const touchStartX = useRef<number>(0);
@@ -53,10 +60,20 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   useEffect(() => {
     setCurrentIndex(initialIndex);
     setScale(1);
-    setShowInfo(false);
   }, [initialIndex, isOpen]);
 
   const currentItem = items[currentIndex];
+
+  // Fetch EXIF metadata whenever current item changes
+  useEffect(() => {
+    if (currentItem && isOpen) {
+      setIsLoadingExif(true);
+      getMediaExifData(currentItem)
+        .then((data) => setExifData(data))
+        .catch(() => setExifData(null))
+        .finally(() => setIsLoadingExif(false));
+    }
+  }, [currentItem, isOpen]);
 
   const handlePrev = useCallback(() => {
     if (currentIndex > 0) {
@@ -287,46 +304,116 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         </div>
       </div>
 
-      {/* Slide-out / Bottom Metadata Info Panel */}
+      {/* Slide-out / Bottom EXIF Metadata Info Panel */}
       {showInfo && (
-        <div className="absolute bottom-4 right-4 z-30 w-80 rounded-2xl bg-black/80 backdrop-blur-2xl border border-white/10 p-4 text-xs space-y-2.5 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150">
-          <div className="flex items-center justify-between pb-2 border-b border-white/10">
-            <span className="font-semibold text-white truncate max-w-[200px]">
-              {currentItem.name}
-            </span>
+        <div className="absolute bottom-4 right-4 z-30 w-84 sm:w-96 rounded-3xl bg-black/85 backdrop-blur-3xl border border-white/15 p-5 text-xs shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200 text-white space-y-4">
+          {/* Header with Title & Close */}
+          <div className="flex items-start justify-between pb-3 border-b border-white/10">
+            <div className="min-w-0 pr-2">
+              <h4 className="font-semibold text-white text-sm truncate">
+                {currentItem.name}
+              </h4>
+              <div className="flex items-center gap-1.5 text-white/60 text-[11px] mt-0.5">
+                <Calendar className="w-3 h-3 text-[#2997FF] shrink-0" />
+                <span>{exifData?.dateTaken || 'Date not recorded'}</span>
+              </div>
+            </div>
             <button
               onClick={() => setShowInfo(false)}
-              className="text-white/60 hover:text-white"
+              className="p-1 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+              title="Close info"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-white/70">
-            <div>
-              <span className="text-white/40 block">Type</span>
-              <span className="capitalize">{currentItem.type}</span>
+
+          {/* Camera & Lens Section */}
+          <div className="p-3 rounded-2xl bg-white/[0.06] border border-white/[0.08] space-y-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#2997FF]/15 text-[#2997FF] flex items-center justify-center shrink-0">
+                <Camera className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-white text-xs truncate">
+                  {exifData?.cameraModel || 'Standard Camera'}
+                </p>
+                <p className="text-[11px] text-white/60 truncate">
+                  {exifData?.lensModel ||
+                    (exifData?.cameraMake
+                      ? `${exifData.cameraMake} Optical Lens`
+                      : 'Main Camera Lens')}
+                </p>
+              </div>
             </div>
-            <div>
-              <span className="text-white/40 block">Size</span>
-              <span>
-                {currentItem.size ? `${(currentItem.size / (1024 * 1024)).toFixed(2)} MB` : '—'}
+
+            {/* Exposure Settings Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-white/80 font-mono">
+              {exifData?.focalLength && (
+                <span className="px-2 py-0.5 rounded-md bg-white/10 border border-white/5">
+                  {exifData.focalLength}
+                </span>
+              )}
+              {exifData?.aperture && (
+                <span className="px-2 py-0.5 rounded-md bg-white/10 border border-white/5 font-sans">
+                  {exifData.aperture}
+                </span>
+              )}
+              {exifData?.shutterSpeed && (
+                <span className="px-2 py-0.5 rounded-md bg-white/10 border border-white/5">
+                  {exifData.shutterSpeed}
+                </span>
+              )}
+              {exifData?.iso && (
+                <span className="px-2 py-0.5 rounded-md bg-white/10 border border-white/5 font-sans">
+                  {exifData.iso}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Resolution & File Details Section */}
+          <div className="grid grid-cols-2 gap-2.5 text-xs">
+            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+              <div className="flex items-center gap-1.5 text-white/40 text-[10px] uppercase font-bold tracking-wider mb-1">
+                <Maximize2 className="w-3 h-3 text-[#34C759]" />
+                <span>Resolution</span>
+              </div>
+              <p className="font-semibold text-white text-xs truncate">
+                {exifData?.resolution ||
+                  `${currentItem.width || 0} × ${currentItem.height || 0}`}
+              </p>
+              {exifData?.megapixels && (
+                <p className="text-[11px] text-[#34C759] font-medium mt-0.5">
+                  {exifData.megapixels}
+                </p>
+              )}
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+              <div className="flex items-center gap-1.5 text-white/40 text-[10px] uppercase font-bold tracking-wider mb-1">
+                <Aperture className="w-3 h-3 text-[#FF9F0A]" />
+                <span>File Info</span>
+              </div>
+              <p className="font-semibold text-white text-xs">
+                {exifData?.fileSizeFormatted ||
+                  (currentItem.size
+                    ? `${(currentItem.size / (1024 * 1024)).toFixed(1)} MB`
+                    : '—')}
+              </p>
+              <p className="text-[11px] text-white/60 capitalize mt-0.5">
+                {currentItem.type === 'video' ? 'MP4 Video' : 'JPEG Image'}
+              </p>
+            </div>
+          </div>
+
+          {currentItem.duration && (
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.04] text-[11px] text-white/70">
+              <span className="text-white/40">Video Duration</span>
+              <span className="font-medium text-white">
+                {Math.round(currentItem.duration)} seconds
               </span>
             </div>
-            {currentItem.width && currentItem.height && (
-              <div>
-                <span className="text-white/40 block">Dimensions</span>
-                <span>
-                  {currentItem.width} × {currentItem.height}
-                </span>
-              </div>
-            )}
-            {currentItem.duration && (
-              <div>
-                <span className="text-white/40 block">Duration</span>
-                <span>{Math.round(currentItem.duration)} seconds</span>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       )}
     </div>

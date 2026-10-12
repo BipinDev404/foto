@@ -35,7 +35,7 @@ export function getInitialConfig(): GalleryConfig {
         adminEmail: parsed.adminEmail || 'admin@foto.gallery',
         viewerPassword: parsed.viewerPassword || import.meta.env.VITE_VIEWER_PASSWORD || 'viewer123',
         adminPassword: parsed.adminPassword || import.meta.env.VITE_ADMIN_PASSWORD || 'admin123',
-        isCustomConfigured: Boolean(url && key),
+        isCustomConfigured: true,
       };
     }
   } catch (e) {
@@ -52,7 +52,7 @@ export function getInitialConfig(): GalleryConfig {
     adminEmail: 'admin@foto.gallery',
     viewerPassword: import.meta.env.VITE_VIEWER_PASSWORD || 'viewer123',
     adminPassword: import.meta.env.VITE_ADMIN_PASSWORD || 'admin123',
-    isCustomConfigured: Boolean(envUrl && envKey),
+    isCustomConfigured: true,
   };
 }
 

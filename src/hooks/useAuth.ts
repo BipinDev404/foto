@@ -16,10 +16,14 @@ const IS_DEMO_KEY = 'foto_auth_is_demo';
 
 export function useAuth(config: GalleryConfig) {
   const [role, setRole] = useState<UserRole | null>(() => {
-    return (sessionStorage.getItem(SESSION_ROLE_KEY) as UserRole) || null;
+    const saved = localStorage.getItem(SESSION_ROLE_KEY) || sessionStorage.getItem(SESSION_ROLE_KEY);
+    if (saved === 'locked') return null;
+    // Default to 'admin' so the gallery project opens directly all over!
+    return (saved as UserRole) || 'admin';
   });
   const [isAuthDemo, setIsAuthDemo] = useState<boolean>(() => {
-    return sessionStorage.getItem(IS_DEMO_KEY) === 'true';
+    const isDemoStored = localStorage.getItem(IS_DEMO_KEY) || sessionStorage.getItem(IS_DEMO_KEY);
+    return isDemoStored !== null ? isDemoStored === 'true' : false;
   });
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -71,7 +75,9 @@ export function useAuth(config: GalleryConfig) {
           setRole(result.role);
           const demoMode = Boolean(result.isDemo);
           setIsAuthDemo(demoMode);
+          localStorage.setItem(SESSION_ROLE_KEY, result.role);
           sessionStorage.setItem(SESSION_ROLE_KEY, result.role);
+          localStorage.setItem(IS_DEMO_KEY, demoMode ? 'true' : 'false');
           sessionStorage.setItem(IS_DEMO_KEY, demoMode ? 'true' : 'false');
           setFailedAttempts(0);
           localStorage.removeItem(ATTEMPTS_KEY);
@@ -112,7 +118,9 @@ export function useAuth(config: GalleryConfig) {
 
   const logout = useCallback(async () => {
     await signOutUser(config);
-    sessionStorage.removeItem(SESSION_ROLE_KEY);
+    localStorage.setItem(SESSION_ROLE_KEY, 'locked');
+    sessionStorage.setItem(SESSION_ROLE_KEY, 'locked');
+    localStorage.removeItem(IS_DEMO_KEY);
     sessionStorage.removeItem(IS_DEMO_KEY);
     setRole(null);
     setIsAuthDemo(false);

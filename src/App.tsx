@@ -165,26 +165,6 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* Subtle Template Demo Notification banner when using default config */}
-        {isDemoMode && !config.isCustomConfigured && (
-          <div className="rounded-2xl bg-white/70 dark:bg-[#1C1C1E]/70 border border-black/[0.06] dark:border-white/[0.08] p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-2.5 text-xs text-[#6E6E73] dark:text-[#86868B]">
-              <Sparkles className="w-4 h-4 text-[#0071E3] shrink-0" />
-              <span>
-                <strong>Template Preview Mode:</strong> You are browsing with sample media. All features
-                (uploading, reordering, deleting) are active! Connect your private Supabase project anytime.
-              </span>
-            </div>
-            <button
-              onClick={() => setIsSetupWizardOpen(true)}
-              className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#0071E3]/10 text-[#0071E3] dark:text-[#2997FF] hover:bg-[#0071E3]/20 transition-colors self-start sm:self-auto shrink-0 flex items-center gap-1.5 cursor-pointer"
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>Setup Wizard</span>
-            </button>
-          </div>
-        )}
-
         {/* View Mode: Home Folder Grid vs Album Media Grid */}
         {!selectedFolderId ? (
           isLoadingFolders ? (
