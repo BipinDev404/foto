@@ -1,0 +1,6 @@
+{
+  "name": "foto",
+  "description": "Private photo and video gallery web app with Apple-style design, secure viewer and admin modes, and custom Supabase backend template.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
